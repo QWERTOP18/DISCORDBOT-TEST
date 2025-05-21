@@ -27,15 +27,23 @@ async def handle_reaction(reaction, user):
             if event_info:
                 event_data = json.loads(event_info)
                 
-                if event_data.get("date") and event_data.get("time"):
-                    # 日付と時間を結合
-                    event_datetime = datetime.strptime(f"{event_data['date']} {event_data['time']}", '%Y-%m-%d %H:%M')
+                if event_data.get("date"):
+                    # 日付のみの場合（終日イベント）
+                    if not event_data.get("time"):
+                        event_datetime = datetime.strptime(event_data['date'], '%Y-%m-%d')
+                        start_time = event_datetime.strftime('%Y%m%d')
+                        end_time = (event_datetime + timedelta(days=1)).strftime('%Y%m%d')
+                        is_all_day = True
+                    else:
+                        # 日付と時間がある場合
+                        event_datetime = datetime.strptime(f"{event_data['date']} {event_data['time']}", '%Y-%m-%d %H:%M')
+                        start_time = event_datetime.strftime('%Y%m%dT%H%M%S')
+                        end_time = (event_datetime + timedelta(hours=1)).strftime('%Y%m%dT%H%M%S')
+                        is_all_day = False
                     
                     # Google Calendar URLを生成
                     event_title = event_data.get("title", "イベント")
                     event_title_encoded = urllib.parse.quote(event_title)
-                    start_time = event_datetime.strftime('%Y%m%dT%H%M%S')
-                    end_time = (event_datetime + timedelta(hours=1)).strftime('%Y%m%dT%H%M%S')
                     
                     calendar_url = f"https://calendar.google.com/calendar/render?action=TEMPLATE&text={event_title_encoded}&dates={start_time}/{end_time}"
                     
@@ -46,13 +54,16 @@ async def handle_reaction(reaction, user):
                         color=discord.Color.blue()
                     )
                     embed.add_field(name="イベントタイトル", value=event_title, inline=True)
-                    embed.add_field(name="イベント日時", value=event_datetime.strftime('%Y年%m月%d日 %H:%M'), inline=True)
+                    if is_all_day:
+                        embed.add_field(name="イベント日時", value=event_datetime.strftime('%Y年%m月%d日 (終日)'), inline=True)
+                    else:
+                        embed.add_field(name="イベント日時", value=event_datetime.strftime('%Y年%m月%d日 %H:%M'), inline=True)
                     embed.add_field(name="説明", value=event_data.get("description", "説明なし"), inline=True)
                     embed.add_field(name="元のメッセージ", value=message_content, inline=False)
                     
                     await channel.send(embed=embed)
                 else:
-                    await channel.send("メッセージから日時情報を抽出できませんでした。\n例: 「明日の15時にミーティング」や「2024/3/20 14:30 プロジェクト会議」などの形式で入力してください。", delete_after=10)
+                    await channel.send("メッセージから日付情報を抽出できませんでした。\n例: 「明日の15時にミーティング」や「2024/3/20 14:30 プロジェクト会議」などの形式で入力してください。", delete_after=10)
             else:
                 await channel.send("イベント情報の抽出中にエラーが発生しました。", delete_after=5)
                 
