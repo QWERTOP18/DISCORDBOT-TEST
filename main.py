@@ -5,8 +5,10 @@ from dotenv import load_dotenv
 from keep_alive import keep_alive
 import os
 # from openAI import get_chatgpt_response
-from datetime import datetime
+from datetime import datetime, timedelta
+import urllib.parse
 import calendar
+from reaction import handle_reaction
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
@@ -27,6 +29,11 @@ async def on_ready():
     except Exception as e:
         print(f"同期エラー: {e}")
 
+# リアクション追加時の処理
+@bot.event
+async def on_reaction_add(reaction, user):
+    await handle_reaction(reaction, user)
+
 # @bot.tree.command(name="chatgpt", description="chatgptを使って質問をします")
 # @app_commands.describe(question="質問内容")
 # async def chatgpt(interaction: discord.Interaction, question: str):
@@ -39,134 +46,56 @@ async def on_ready():
 #     # 応答を送信
 #     await interaction.followup.send(f'質問: {question}\n\n回答: {response}')
 
-
-@bot.tree.command(name="date", description="今月のカレンダーをEmbedで表示します")
-async def date(interaction: discord.Interaction):
-    now = datetime.now()
-    year, month, today = now.year, now.month, now.day
-
-    cal = calendar.Calendar(firstweekday=6)  # Sunday start
-    weeks = cal.monthdayscalendar(year, month)
-
-    # カレンダーテキスト生成
-    calendar_lines = ["Su Mo Tu We Th Fr Sa"]
-    for week in weeks:
-        line = ""
-        for day in week:
-            if day == 0:
-                line += "   "
-            elif day == today:
-                line += f"**{str(day).rjust(2)}** "
-            else:
-                line += f"{str(day).rjust(2)} "
-        calendar_lines.append(line.strip())
-    calendar_text = "\n".join(calendar_lines)
-
-    # Embed作成
-    embed = discord.Embed(
-        title=f"{calendar.month_name[month]} {year}",
-        description=calendar_text,
-        color=discord.Color.red()  # 好きな色に変更可（例：.blue(), .green(), .gold()）
-    )
-    embed.set_footer(text=f"Today is {year}-{month:02d}-{today:02d}")
-
-    await interaction.response.send_message(embed=embed)
-
-# スラッシュコマンドの例: /hello
-@bot.tree.command(name="hello", description="挨拶をします")
-async def hello(interaction: discord.Interaction):
-    await interaction.response.send_message(f'こんにちは、{interaction.user.name}さん！')
-
-# スラッシュコマンドの例: /ping
+# /ping
 @bot.tree.command(name="ping", description="ボットの応答を確認します")
 async def ping(interaction: discord.Interaction):
     await interaction.response.send_message('Pong!')
 
-# 数値を引数に取るコマンド: /dice
-@bot.tree.command(name="dice", description="サイコロを振ります")
-@app_commands.describe(sides="サイコロの面の数（デフォルト: 6）")
-async def dice(interaction: discord.Interaction, sides: int = 6):
-    import random
-    result = random.randint(1, sides)
-    await interaction.response.send_message(f'🎲 {result}が出ました！')
-
-# 文字列を引数に取るコマンド: /echo
-@bot.tree.command(name="echo", description="メッセージを繰り返します")
-@app_commands.describe(message="繰り返すメッセージ")
-async def echo(interaction: discord.Interaction, message: str):
-    await interaction.response.send_message(f'📢 {message}')
-
-# 複数の引数を取るコマンド: /calc
-@bot.tree.command(name="calc", description="簡単な計算をします")
+# /schedule
+@bot.tree.command(name="schedule", description="スケジュールを表示します")
 @app_commands.describe(
-    num1="1つ目の数字",
-    num2="2つ目の数字",
-    operation="演算子（+、-、*、/）"
+    date="日付 (YYYY-MM-DD形式)",
+    time="時間 (HH:MM形式)",
+    title="タイトル",
+    description="説明"
 )
-async def calc(interaction: discord.Interaction, num1: float, num2: float, operation: str):
-    result = None
-    if operation == '+':
-        result = num1 + num2
-    elif operation == '-':
-        result = num1 - num2
-    elif operation == '*':
-        result = num1 * num2
-    elif operation == '/':
-        if num2 == 0:
-            await interaction.response.send_message('❌ 0で割ることはできません！')
-            return
-        result = num1 / num2
-    else:
-        await interaction.response.send_message('❌ 無効な演算子です。+、-、*、/ のいずれかを使用してください。')
-        return
-    
-    await interaction.response.send_message(f'計算結果: {num1} {operation} {num2} = {result}')
-
-@bot.event
-async def on_reaction_add(reaction, user):
-    # ボット自身のリアクションは無視
-    if user.bot:
-        return
-
-    # メッセージのチャンネルを取得
-    channel = reaction.message.channel
-    
-    # リアクションが🌟の場合
-    if str(reaction.emoji) == '🌟':
-        try:
-            # メッセージの内容を取得
-            message_content = reaction.message.content
-            message_author = reaction.message.author.name
-            
-            # メッセージに添付ファイルがある場合
-            attachments = []
-            for attachment in reaction.message.attachments:
-                attachments.append(f"添付ファイル: {attachment.url}")
-            
-            # DMを送信
-            embed = discord.Embed(
-                title="🌟 保存されたメッセージ",
-                description=message_content,
-                color=discord.Color.gold()
-            )
-            embed.add_field(name="送信者", value=message_author, inline=True)
-            embed.add_field(name="チャンネル", value=channel.name, inline=True)
-            
-            if attachments:
-                embed.add_field(name="添付ファイル", value="\n".join(attachments), inline=False)
-            
-            await user.send(embed=embed)
-            
-            # チャンネルに確認メッセージを送信
-            await channel.send(f"{user.mention} さんにメッセージをDMで送信しました！", delete_after=5)
-            
-        except discord.Forbidden:
-            await channel.send(f"{user.mention} さん、DMを送信できませんでした。DMの設定を確認してください。", delete_after=10)
-        except Exception as e:
-            print(f"エラーが発生しました: {e}")
-            await channel.send("メッセージの送信中にエラーが発生しました。", delete_after=5)
-
-
+async def schedule(interaction: discord.Interaction, date: str, time: str, title: str, description: str = ""):
+    try:
+        # 日付と時間を結合してdatetimeオブジェクトを作成
+        event_datetime = datetime.strptime(f"{date} {time}", '%Y-%m-%d %H:%M')
+        
+        # Google Calendar URLを生成
+        event_title_encoded = urllib.parse.quote(title)
+        start_time = event_datetime.strftime('%Y%m%dT%H%M%S')
+        end_time = (event_datetime + timedelta(hours=1)).strftime('%Y%m%dT%H%M%S')
+        description_encoded = urllib.parse.quote(description)
+        
+        calendar_url = f"https://calendar.google.com/calendar/render?action=TEMPLATE&text={event_title_encoded}&dates={start_time}/{end_time}&details={description_encoded}"
+        
+        # 埋め込みメッセージを作成
+        embed = discord.Embed(
+            title="📅 Google Calendar イベント",
+            description=f"以下のURLからイベントを追加できます：\n[Google Calendarで開く]({calendar_url})",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="イベントタイトル", value=title, inline=True)
+        embed.add_field(name="イベント日時", value=event_datetime.strftime('%Y年%m月%d日 %H:%M'), inline=True)
+        embed.add_field(name="説明", value=description, inline=True)
+        
+        await interaction.response.send_message(embed=embed)
+        
+    except ValueError as e:
+        await interaction.response.send_message(
+            "日付または時間の形式が正しくありません。\n"
+            "日付は YYYY-MM-DD 形式（例: 2024-03-20）\n"
+            "時間は HH:MM 形式（例: 15:30）で入力してください。",
+            ephemeral=True
+        )
+    except Exception as e:
+        await interaction.response.send_message(
+            "イベントの作成中にエラーが発生しました。",
+            ephemeral=True
+        )
 
 keep_alive()
 bot.run(DISCORD_TOKEN)
