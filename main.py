@@ -7,8 +7,11 @@ import os
 # from openAI import get_chatgpt_response
 from datetime import datetime, timedelta
 import urllib.parse
-import calendar
+
 from reaction import handle_reaction
+from srcs.news import get_news_articles
+from srcs.qiita import get_qiita_articles
+from srcs.mention import handle_mention
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
@@ -17,6 +20,8 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 intents = discord.Intents.default()
 intents.message_content = True  # メッセージの内容を読み取る権限
 intents.reactions = True        # リアクションを読み取る権限
+intents.guild_scheduled_events = True  # イベントを読み取る権限
+
 bot = commands.Bot(command_prefix='/', intents=intents)
 
 # ボットの起動時の処理
@@ -96,6 +101,13 @@ async def schedule(interaction: discord.Interaction, date: str, time: str, title
             "イベントの作成中にエラーが発生しました。",
             ephemeral=True
         )
+
+# メンション時の処理
+@bot.event
+async def on_message(message):
+    await handle_mention(message, bot)
+    # コマンドの処理を継続するために必要
+    await bot.process_commands(message)
 
 keep_alive()
 bot.run(DISCORD_TOKEN)
